@@ -1,0 +1,25 @@
+# Navi — Customer Success MCP Server Configuration
+#
+# Copy this file to navi.yaml and customize as needed.
+# API keys should be set via environment variables, never in this file.
+
+# Logging level: debug, info, warn, error
+# Override with NAVI_LOG_LEVEL env var
+log_level: info
+
+# In-memory cache configuration
+cache:
+  default_ttl: 5m     # How long to cache API responses
+  max_entries: 1000    # Maximum number of cached entries
+
+# Vault — Billing provider (Stripe)
+# Set NAVI_VAULT_API_KEY env var for authentication
+# Override backend with NAVI_VAULT_BACKEND env var
+vault:
+  backend: stripe      # "stripe" (more backends coming)
+
+# Chronicle — Communications provider (HubSpot)
+# Set NAVI_CHRONICLE_API_KEY env var for authentication
+# Override backend with NAVI_CHRONICLE_BACKEND env var
+chronicle:
+  backend: hubspot     # "hubspot" (more backends coming)
