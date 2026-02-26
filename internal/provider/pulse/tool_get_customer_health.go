@@ -70,6 +70,23 @@ func (p *Provider) handleGetCustomerHealth(ctx context.Context, req mcp.CallTool
 		sb.WriteString("| Billing | - | _Provider not configured_ |\n")
 	}
 
+	// Support ticket signals.
+	if p.support != nil {
+		tickets, err := p.support.GetOpenTickets(ctx, customerID)
+		if err != nil {
+			p.logger.Warn("support signal unavailable", "error", err)
+			sb.WriteString("| Support Ticket Load | - | _Unavailable_ |\n")
+		} else {
+			score := scoreSupportTicketLoad(len(tickets))
+			totalScore += score
+			signalCount++
+			details := fmt.Sprintf("%d open/pending tickets", len(tickets))
+			sb.WriteString(fmt.Sprintf("| Support Ticket Load | %.0f/100 | %s |\n", score, details))
+		}
+	} else {
+		sb.WriteString("| Support Tickets | - | _Provider not configured_ |\n")
+	}
+
 	// Communications signals.
 	if p.comms != nil {
 		comms, err := p.comms.GetRecentCommunications(ctx, customerID, 10)
@@ -170,6 +187,21 @@ func scoreCommsRecencyFromCount(count int, latest time.Time) (float64, string) {
 	}
 
 	return score, details
+}
+
+func scoreSupportTicketLoad(openCount int) float64 {
+	switch {
+	case openCount == 0:
+		return 100
+	case openCount <= 2:
+		return 80
+	case openCount <= 5:
+		return 60
+	case openCount <= 10:
+		return 40
+	default:
+		return 20
+	}
 }
 
 func healthLabel(score float64) string {

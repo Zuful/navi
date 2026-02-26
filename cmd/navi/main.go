@@ -17,6 +17,7 @@ import (
 	"github.com/Zuful/navi/internal/config"
 	"github.com/Zuful/navi/internal/dispatcher"
 	"github.com/Zuful/navi/internal/httpclient"
+	"github.com/Zuful/navi/internal/provider/beacon"
 	"github.com/Zuful/navi/internal/provider/chronicle"
 	"github.com/Zuful/navi/internal/provider/pulse"
 	"github.com/Zuful/navi/internal/provider/scout"
@@ -75,6 +76,7 @@ func run(cfg *config.Config, logger *slog.Logger) error {
 	// ── Track client interfaces for aggregators ─────────────────────
 	var billingClient vault.BillingClient
 	var commsClient chronicle.CommsClient
+	var supportClient beacon.SupportClient
 
 	// ── Vault (billing) — optional ──────────────────────────────────
 	if cfg.Vault != nil {
@@ -111,6 +113,23 @@ func run(cfg *config.Config, logger *slog.Logger) error {
 		logger.Info("chronicle provider not configured, skipping")
 	}
 
+	// ── Beacon (support tickets) — optional ────────────────────────
+	if cfg.Beacon != nil {
+		beaconProv, err := beacon.NewFromConfig(cfg.Beacon.Backend, cfg.Beacon.APIKey, cfg.Beacon.Subdomain, httpClient, beacon.WithLogger(logger))
+		if err != nil {
+			logger.Warn("beacon provider not available, skipping",
+				slog.String("reason", err.Error()),
+			)
+		} else {
+			if err := d.Register(beaconProv); err != nil {
+				return fmt.Errorf("register beacon provider: %w", err)
+			}
+			supportClient = newSupportClientFromConfig(cfg.Beacon.Backend, cfg.Beacon.APIKey, cfg.Beacon.Subdomain, httpClient)
+		}
+	} else {
+		logger.Info("beacon provider not configured, skipping")
+	}
+
 	// ── Pulse (health scoring aggregator) — always register ─────────
 	pulseOpts := []pulse.Option{pulse.WithLogger(logger)}
 	if billingClient != nil {
@@ -118,6 +137,9 @@ func run(cfg *config.Config, logger *slog.Logger) error {
 	}
 	if commsClient != nil {
 		pulseOpts = append(pulseOpts, pulse.WithComms(commsClient))
+	}
+	if supportClient != nil {
+		pulseOpts = append(pulseOpts, pulse.WithSupport(supportClient))
 	}
 	pulseProv := pulse.New(pulseOpts...)
 	if err := d.Register(pulseProv); err != nil {
@@ -131,6 +153,9 @@ func run(cfg *config.Config, logger *slog.Logger) error {
 	}
 	if commsClient != nil {
 		scoutOpts = append(scoutOpts, scout.WithComms(commsClient))
+	}
+	if supportClient != nil {
+		scoutOpts = append(scoutOpts, scout.WithSupport(supportClient))
 	}
 	scoutProv := scout.New(scoutOpts...)
 	if err := d.Register(scoutProv); err != nil {
@@ -177,6 +202,16 @@ func newCommsClientFromConfig(backend, apiKey string, httpClient *httpclient.Cli
 	switch backend {
 	case "hubspot", "":
 		return chronicle.NewHubSpotClient(apiKey, httpClient)
+	default:
+		return nil
+	}
+}
+
+// newSupportClientFromConfig creates a SupportClient for use by aggregators.
+func newSupportClientFromConfig(backend, apiKey, subdomain string, httpClient *httpclient.Client) beacon.SupportClient {
+	switch backend {
+	case "zendesk", "":
+		return beacon.NewZendeskClient(apiKey, subdomain, httpClient)
 	default:
 		return nil
 	}

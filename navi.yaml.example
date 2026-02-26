@@ -23,3 +23,11 @@ vault:
 # Override backend with NAVI_CHRONICLE_BACKEND env var
 chronicle:
   backend: hubspot     # "hubspot" (more backends coming)
+
+# Beacon — Support ticket provider (Zendesk)
+# Set NAVI_BEACON_API_KEY env var for authentication
+# Override backend with NAVI_BEACON_BACKEND env var
+# Override subdomain with NAVI_BEACON_SUBDOMAIN env var
+beacon:
+  backend: zendesk     # "zendesk" (more backends coming)
+  subdomain: mycompany # Zendesk subdomain

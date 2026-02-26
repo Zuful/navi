@@ -11,10 +11,11 @@ import (
 
 // Config is the top-level configuration for Navi.
 type Config struct {
-	LogLevel string      `yaml:"log_level"`
-	Cache    CacheConfig `yaml:"cache"`
-	Vault    *VaultConfig    `yaml:"vault"`
+	LogLevel  string           `yaml:"log_level"`
+	Cache     CacheConfig      `yaml:"cache"`
+	Vault     *VaultConfig     `yaml:"vault"`
 	Chronicle *ChronicleConfig `yaml:"chronicle"`
+	Beacon    *BeaconConfig    `yaml:"beacon"`
 }
 
 // CacheConfig controls the in-memory TTL cache.
@@ -33,6 +34,13 @@ type VaultConfig struct {
 type ChronicleConfig struct {
 	Backend string `yaml:"backend"`
 	APIKey  string `yaml:"-"` // never from YAML; always from env
+}
+
+// BeaconConfig holds settings for the support ticket provider.
+type BeaconConfig struct {
+	Backend   string `yaml:"backend"`
+	Subdomain string `yaml:"subdomain"`
+	APIKey    string `yaml:"-"` // never from YAML; always from env
 }
 
 // Load reads the YAML config file and applies environment variable overrides.
@@ -87,6 +95,23 @@ func Load() (*Config, error) {
 		cfg.Chronicle.APIKey = chronicleAPIKey
 		if chronicleBackend != "" {
 			cfg.Chronicle.Backend = chronicleBackend
+		}
+	}
+
+	// Beacon config from env vars.
+	beaconAPIKey := os.Getenv("NAVI_BEACON_API_KEY")
+	beaconBackend := os.Getenv("NAVI_BEACON_BACKEND")
+	beaconSubdomain := os.Getenv("NAVI_BEACON_SUBDOMAIN")
+	if beaconAPIKey != "" || beaconBackend != "" || beaconSubdomain != "" || cfg.Beacon != nil {
+		if cfg.Beacon == nil {
+			cfg.Beacon = &BeaconConfig{Backend: "zendesk"}
+		}
+		cfg.Beacon.APIKey = beaconAPIKey
+		if beaconBackend != "" {
+			cfg.Beacon.Backend = beaconBackend
+		}
+		if beaconSubdomain != "" {
+			cfg.Beacon.Subdomain = beaconSubdomain
 		}
 	}
 

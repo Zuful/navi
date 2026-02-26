@@ -1,6 +1,6 @@
 # Navi
 
-Customer Success MCP server that aggregates customer signals from external SaaS tools (Stripe, HubSpot) so AI agents can answer CS questions like "which accounts are at risk?" or "show me this customer's billing history."
+Customer Success MCP server that aggregates customer signals from external SaaS tools (Stripe, HubSpot, Zendesk) so AI agents can answer CS questions like "which accounts are at risk?" or "show me this customer's billing history."
 
 Named after the fairy companion from Zelda.
 
@@ -14,6 +14,11 @@ Named after the fairy companion from Zelda.
 ### Chronicle (Communications — HubSpot)
 - `get_recent_communications` — recent emails, notes, calls for a customer
 - `get_contact_timeline` — chronological activity timeline for a contact
+
+### Beacon (Support Tickets — Zendesk)
+- `get_open_tickets` — open/pending support tickets for a customer
+- `get_ticket_history` — full ticket history across all statuses
+- `get_satisfaction_scores` — CSAT scores and resolution metrics
 
 ### Pulse (Health Scoring)
 - `get_customer_health` — composite health score from billing + communications signals
@@ -32,6 +37,8 @@ go build ./cmd/navi
 cp navi.yaml.example navi.yaml
 export NAVI_VAULT_API_KEY="sk_..."        # Stripe secret key
 export NAVI_CHRONICLE_API_KEY="pat-..."   # HubSpot private app token
+export NAVI_BEACON_API_KEY="..."         # Zendesk API token
+export NAVI_BEACON_SUBDOMAIN="mycompany" # Zendesk subdomain
 
 # Run
 ./navi
@@ -49,6 +56,9 @@ Navi uses YAML configuration with environment variable overrides:
 | `NAVI_VAULT_BACKEND` | Billing backend (default: `stripe`) |
 | `NAVI_CHRONICLE_API_KEY` | HubSpot private app token |
 | `NAVI_CHRONICLE_BACKEND` | Communications backend (default: `hubspot`) |
+| `NAVI_BEACON_API_KEY` | Zendesk API token |
+| `NAVI_BEACON_BACKEND` | Support ticket backend (default: `zendesk`) |
+| `NAVI_BEACON_SUBDOMAIN` | Zendesk subdomain (e.g. `mycompany`) |
 
 Providers are optional — omit the config section or API key to skip a provider. Aggregators (Pulse, Scout) always register and work with whatever providers are available.
 
@@ -56,7 +66,7 @@ Providers are optional — omit the config section or API key to skip a provider
 
 ```bash
 docker build -t navi .
-docker run -e NAVI_VAULT_API_KEY=sk_... -e NAVI_CHRONICLE_API_KEY=pat-... navi
+docker run -e NAVI_VAULT_API_KEY=sk_... -e NAVI_CHRONICLE_API_KEY=pat-... -e NAVI_BEACON_API_KEY=... -e NAVI_BEACON_SUBDOMAIN=mycompany navi
 ```
 
 ## MCP Client Configuration
@@ -68,7 +78,9 @@ docker run -e NAVI_VAULT_API_KEY=sk_... -e NAVI_CHRONICLE_API_KEY=pat-... navi
       "command": "./navi",
       "env": {
         "NAVI_VAULT_API_KEY": "sk_...",
-        "NAVI_CHRONICLE_API_KEY": "pat-..."
+        "NAVI_CHRONICLE_API_KEY": "pat-...",
+        "NAVI_BEACON_API_KEY": "...",
+        "NAVI_BEACON_SUBDOMAIN": "mycompany"
       }
     }
   }

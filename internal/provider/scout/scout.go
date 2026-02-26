@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/Zuful/navi/internal/provider"
+	"github.com/Zuful/navi/internal/provider/beacon"
 	"github.com/Zuful/navi/internal/provider/chronicle"
 	"github.com/Zuful/navi/internal/provider/vault"
 )
@@ -13,6 +14,7 @@ import (
 type Provider struct {
 	billing vault.BillingClient
 	comms   chronicle.CommsClient
+	support beacon.SupportClient
 	logger  *slog.Logger
 }
 
@@ -23,6 +25,7 @@ type options struct {
 	logger  *slog.Logger
 	billing vault.BillingClient
 	comms   chronicle.CommsClient
+	support beacon.SupportClient
 }
 
 // WithLogger sets a custom logger.
@@ -40,6 +43,11 @@ func WithComms(c chronicle.CommsClient) Option {
 	return func(o *options) { o.comms = c }
 }
 
+// WithSupport injects a support ticket client.
+func WithSupport(s beacon.SupportClient) Option {
+	return func(o *options) { o.support = s }
+}
+
 // New creates a new scout provider.
 func New(opts ...Option) *Provider {
 	o := &options{logger: slog.Default()}
@@ -49,6 +57,7 @@ func New(opts ...Option) *Provider {
 	return &Provider{
 		billing: o.billing,
 		comms:   o.comms,
+		support: o.support,
 		logger:  o.logger.With(slog.String("provider", "scout")),
 	}
 }

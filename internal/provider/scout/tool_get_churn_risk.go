@@ -129,6 +129,53 @@ func (p *Provider) handleGetChurnRisk(ctx context.Context, req mcp.CallToolReque
 		}
 	}
 
+	// Support ticket factors.
+	if p.support != nil {
+		tickets, err := p.support.GetOpenTickets(ctx, customerID)
+		if err != nil {
+			p.logger.Warn("support signal unavailable for churn assessment", "error", err)
+		} else {
+			signalCount++
+			if len(tickets) > 5 {
+				factors = append(factors, churnFactor{
+					signal: "High Ticket Volume",
+					impact: "high",
+					detail: fmt.Sprintf("%d open/pending support tickets", len(tickets)),
+				})
+				riskScore += 50
+			} else if len(tickets) > 2 {
+				factors = append(factors, churnFactor{
+					signal: "Elevated Ticket Volume",
+					impact: "medium",
+					detail: fmt.Sprintf("%d open/pending support tickets", len(tickets)),
+				})
+				riskScore += 25
+			}
+		}
+
+		satMetrics, err := p.support.GetSatisfactionScores(ctx, customerID)
+		if err != nil {
+			p.logger.Warn("satisfaction signal unavailable for churn assessment", "error", err)
+		} else {
+			if satMetrics.TotalRatings > 0 && satMetrics.AverageCSAT < 50 {
+				factors = append(factors, churnFactor{
+					signal: "Low CSAT Score",
+					impact: "high",
+					detail: fmt.Sprintf("%.0f%% average satisfaction (%d ratings)", satMetrics.AverageCSAT, satMetrics.TotalRatings),
+				})
+				riskScore += 40
+			}
+			if satMetrics.AverageResolutionHours > 48 {
+				factors = append(factors, churnFactor{
+					signal: "Slow Resolution Times",
+					impact: "medium",
+					detail: fmt.Sprintf("%.1f hour average resolution time", satMetrics.AverageResolutionHours),
+				})
+				riskScore += 20
+			}
+		}
+	}
+
 	// Communication factors.
 	if p.comms != nil {
 		comms, err := p.comms.GetRecentCommunications(ctx, customerID, 10)
@@ -233,6 +280,7 @@ func recommendations(score float64, factors []churnFactor) []string {
 	hasPaymentIssue := false
 	hasCommGap := false
 	hasCancellation := false
+	hasSupportIssue := false
 
 	for _, f := range factors {
 		switch f.signal {
@@ -242,6 +290,8 @@ func recommendations(score float64, factors []churnFactor) []string {
 			hasCommGap = true
 		case "Subscription Canceled", "Pending Cancellation":
 			hasCancellation = true
+		case "High Ticket Volume", "Elevated Ticket Volume", "Low CSAT Score", "Slow Resolution Times":
+			hasSupportIssue = true
 		}
 	}
 
@@ -253,6 +303,11 @@ func recommendations(score float64, factors []churnFactor) []string {
 	if hasPaymentIssue {
 		recs = append(recs, "Reach out about payment issues — offer payment plan if needed")
 		recs = append(recs, "Verify payment method is up to date")
+	}
+
+	if hasSupportIssue {
+		recs = append(recs, "Review open support tickets and prioritize resolution")
+		recs = append(recs, "Escalate unresolved tickets to senior support or engineering")
 	}
 
 	if hasCommGap {
