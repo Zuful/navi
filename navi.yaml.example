@@ -31,3 +31,11 @@ chronicle:
 beacon:
   backend: zendesk     # "zendesk" (more backends coming)
   subdomain: mycompany # Zendesk subdomain
+
+# Radar — Product usage analytics provider (Mixpanel)
+# Set NAVI_RADAR_API_KEY env var for authentication
+# Override backend with NAVI_RADAR_BACKEND env var
+# Override project ID with NAVI_RADAR_PROJECT_ID env var
+radar:
+  backend: mixpanel    # "mixpanel" (more backends coming)
+  project_id: "123456" # Mixpanel project ID

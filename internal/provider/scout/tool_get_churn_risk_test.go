@@ -9,6 +9,7 @@ import (
 
 	"github.com/Zuful/navi/internal/provider/beacon"
 	"github.com/Zuful/navi/internal/provider/chronicle"
+	"github.com/Zuful/navi/internal/provider/radar"
 	"github.com/Zuful/navi/internal/provider/vault"
 )
 
@@ -69,6 +70,27 @@ func (m *mockSupportClient) GetTicketHistory(_ context.Context, _ string, _ int)
 
 func (m *mockSupportClient) GetSatisfactionScores(_ context.Context, _ string) (*beacon.SatisfactionMetrics, error) {
 	return m.satisfaction, m.satErr
+}
+
+type mockUsageClient struct {
+	summary    *radar.UsageSummary
+	summaryErr error
+	adoption   *radar.FeatureAdoption
+	adoptErr   error
+	trend      *radar.UsageTrend
+	trendErr   error
+}
+
+func (m *mockUsageClient) GetUsageSummary(_ context.Context, _ string, _ int) (*radar.UsageSummary, error) {
+	return m.summary, m.summaryErr
+}
+
+func (m *mockUsageClient) GetFeatureAdoption(_ context.Context, _ string, _ int) (*radar.FeatureAdoption, error) {
+	return m.adoption, m.adoptErr
+}
+
+func (m *mockUsageClient) GetUsageTrend(_ context.Context, _ string, _ int) (*radar.UsageTrend, error) {
+	return m.trend, m.trendErr
 }
 
 // --- Helpers ---
@@ -229,5 +251,102 @@ func TestGetChurnRisk_NoSignals(t *testing.T) {
 	text := getText(t, result)
 	if !strings.Contains(text, "N/A") {
 		t.Error("expected N/A when no signals")
+	}
+}
+
+func TestGetChurnRisk_DecliningUsage(t *testing.T) {
+	usage := &mockUsageClient{
+		trend: &radar.UsageTrend{
+			Direction:     "declining",
+			ChangePercent: -35.0, // < -30% → high impact
+		},
+		summary: &radar.UsageSummary{DAU: 5, MAU: 100},
+	}
+	p := New(WithUsage(usage))
+
+	req := newReq(map[string]any{"customer_id": "C-100"})
+	result, err := p.handleGetChurnRisk(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := getText(t, result)
+	if !strings.Contains(text, "Declining Usage") {
+		t.Error("expected 'Declining Usage' factor")
+	}
+	if !strings.Contains(text, "High") {
+		t.Error("expected high impact for >30% decline")
+	}
+}
+
+func TestGetChurnRisk_UsageSlowdown(t *testing.T) {
+	usage := &mockUsageClient{
+		trend: &radar.UsageTrend{
+			Direction:     "declining",
+			ChangePercent: -15.0, // < -10% but > -30% → medium impact
+		},
+		summary: &radar.UsageSummary{DAU: 10, MAU: 100},
+	}
+	p := New(WithUsage(usage))
+
+	req := newReq(map[string]any{"customer_id": "C-100"})
+	result, err := p.handleGetChurnRisk(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := getText(t, result)
+	if !strings.Contains(text, "Usage Slowdown") {
+		t.Error("expected 'Usage Slowdown' factor")
+	}
+	if !strings.Contains(text, "Medium") {
+		t.Error("expected medium impact for 10-30% decline")
+	}
+}
+
+func TestGetChurnRisk_NoRecentActivity(t *testing.T) {
+	usage := &mockUsageClient{
+		trend: &radar.UsageTrend{
+			Direction:     "declining",
+			ChangePercent: -5.0, // not enough for declining/slowdown
+		},
+		summary: &radar.UsageSummary{DAU: 0, MAU: 0}, // DAU=0 → No Recent Activity
+	}
+	p := New(WithUsage(usage))
+
+	req := newReq(map[string]any{"customer_id": "C-100"})
+	result, err := p.handleGetChurnRisk(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := getText(t, result)
+	if !strings.Contains(text, "No Recent Activity") {
+		t.Error("expected 'No Recent Activity' factor")
+	}
+}
+
+func TestGetChurnRisk_UsageRecommendations(t *testing.T) {
+	usage := &mockUsageClient{
+		trend: &radar.UsageTrend{
+			Direction:     "declining",
+			ChangePercent: -40.0,
+		},
+		summary: &radar.UsageSummary{DAU: 5, MAU: 100},
+	}
+	p := New(WithUsage(usage))
+
+	req := newReq(map[string]any{"customer_id": "C-100"})
+	result, err := p.handleGetChurnRisk(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := getText(t, result)
+	if !strings.Contains(text, "Review product usage patterns") {
+		t.Error("expected usage-related recommendation")
+	}
+	if !strings.Contains(text, "Schedule a product training") {
+		t.Error("expected training recommendation")
 	}
 }

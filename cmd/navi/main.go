@@ -20,6 +20,7 @@ import (
 	"github.com/Zuful/navi/internal/provider/beacon"
 	"github.com/Zuful/navi/internal/provider/chronicle"
 	"github.com/Zuful/navi/internal/provider/pulse"
+	"github.com/Zuful/navi/internal/provider/radar"
 	"github.com/Zuful/navi/internal/provider/scout"
 	"github.com/Zuful/navi/internal/provider/vault"
 )
@@ -77,6 +78,7 @@ func run(cfg *config.Config, logger *slog.Logger) error {
 	var billingClient vault.BillingClient
 	var commsClient chronicle.CommsClient
 	var supportClient beacon.SupportClient
+	var usageClient radar.UsageClient
 
 	// ── Vault (billing) — optional ──────────────────────────────────
 	if cfg.Vault != nil {
@@ -130,6 +132,23 @@ func run(cfg *config.Config, logger *slog.Logger) error {
 		logger.Info("beacon provider not configured, skipping")
 	}
 
+	// ── Radar (product usage analytics) — optional ─────────────────
+	if cfg.Radar != nil {
+		radarProv, err := radar.NewFromConfig(cfg.Radar.Backend, cfg.Radar.APIKey, cfg.Radar.ProjectID, httpClient, radar.WithLogger(logger))
+		if err != nil {
+			logger.Warn("radar provider not available, skipping",
+				slog.String("reason", err.Error()),
+			)
+		} else {
+			if err := d.Register(radarProv); err != nil {
+				return fmt.Errorf("register radar provider: %w", err)
+			}
+			usageClient = newUsageClientFromConfig(cfg.Radar.Backend, cfg.Radar.APIKey, cfg.Radar.ProjectID, httpClient)
+		}
+	} else {
+		logger.Info("radar provider not configured, skipping")
+	}
+
 	// ── Pulse (health scoring aggregator) — always register ─────────
 	pulseOpts := []pulse.Option{pulse.WithLogger(logger)}
 	if billingClient != nil {
@@ -140,6 +159,9 @@ func run(cfg *config.Config, logger *slog.Logger) error {
 	}
 	if supportClient != nil {
 		pulseOpts = append(pulseOpts, pulse.WithSupport(supportClient))
+	}
+	if usageClient != nil {
+		pulseOpts = append(pulseOpts, pulse.WithUsage(usageClient))
 	}
 	pulseProv := pulse.New(pulseOpts...)
 	if err := d.Register(pulseProv); err != nil {
@@ -156,6 +178,9 @@ func run(cfg *config.Config, logger *slog.Logger) error {
 	}
 	if supportClient != nil {
 		scoutOpts = append(scoutOpts, scout.WithSupport(supportClient))
+	}
+	if usageClient != nil {
+		scoutOpts = append(scoutOpts, scout.WithUsage(usageClient))
 	}
 	scoutProv := scout.New(scoutOpts...)
 	if err := d.Register(scoutProv); err != nil {
@@ -212,6 +237,16 @@ func newSupportClientFromConfig(backend, apiKey, subdomain string, httpClient *h
 	switch backend {
 	case "zendesk", "":
 		return beacon.NewZendeskClient(apiKey, subdomain, httpClient)
+	default:
+		return nil
+	}
+}
+
+// newUsageClientFromConfig creates a UsageClient for use by aggregators.
+func newUsageClientFromConfig(backend, apiKey, projectID string, httpClient *httpclient.Client) radar.UsageClient {
+	switch backend {
+	case "mixpanel", "":
+		return radar.NewMixpanelClient(apiKey, projectID, httpClient)
 	default:
 		return nil
 	}

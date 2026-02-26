@@ -176,6 +176,45 @@ func (p *Provider) handleGetChurnRisk(ctx context.Context, req mcp.CallToolReque
 		}
 	}
 
+	// Usage factors.
+	if p.usage != nil {
+		trend, err := p.usage.GetUsageTrend(ctx, customerID, 3)
+		if err != nil {
+			p.logger.Warn("usage signal unavailable for churn assessment", "error", err)
+		} else {
+			signalCount++
+			if trend.ChangePercent < -30 {
+				factors = append(factors, churnFactor{
+					signal: "Declining Usage",
+					impact: "high",
+					detail: fmt.Sprintf("%.1f%% decrease in product usage", -trend.ChangePercent),
+				})
+				riskScore += 60
+			} else if trend.ChangePercent < -10 {
+				factors = append(factors, churnFactor{
+					signal: "Usage Slowdown",
+					impact: "medium",
+					detail: fmt.Sprintf("%.1f%% decrease in product usage", -trend.ChangePercent),
+				})
+				riskScore += 30
+			}
+		}
+
+		summary, err := p.usage.GetUsageSummary(ctx, customerID, 30)
+		if err != nil {
+			p.logger.Warn("usage summary unavailable for churn assessment", "error", err)
+		} else {
+			if summary.DAU == 0 {
+				factors = append(factors, churnFactor{
+					signal: "No Recent Activity",
+					impact: "high",
+					detail: "No daily active users in the last 30 days",
+				})
+				riskScore += 50
+			}
+		}
+	}
+
 	// Communication factors.
 	if p.comms != nil {
 		comms, err := p.comms.GetRecentCommunications(ctx, customerID, 10)
@@ -281,6 +320,7 @@ func recommendations(score float64, factors []churnFactor) []string {
 	hasCommGap := false
 	hasCancellation := false
 	hasSupportIssue := false
+	hasUsageDecline := false
 
 	for _, f := range factors {
 		switch f.signal {
@@ -292,6 +332,8 @@ func recommendations(score float64, factors []churnFactor) []string {
 			hasCancellation = true
 		case "High Ticket Volume", "Elevated Ticket Volume", "Low CSAT Score", "Slow Resolution Times":
 			hasSupportIssue = true
+		case "Declining Usage", "Usage Slowdown", "No Recent Activity":
+			hasUsageDecline = true
 		}
 	}
 
@@ -308,6 +350,11 @@ func recommendations(score float64, factors []churnFactor) []string {
 	if hasSupportIssue {
 		recs = append(recs, "Review open support tickets and prioritize resolution")
 		recs = append(recs, "Escalate unresolved tickets to senior support or engineering")
+	}
+
+	if hasUsageDecline {
+		recs = append(recs, "Review product usage patterns and identify adoption gaps")
+		recs = append(recs, "Schedule a product training or onboarding refresher session")
 	}
 
 	if hasCommGap {

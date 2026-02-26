@@ -135,3 +135,29 @@ func TestScoreCommsRecencyFromCount(t *testing.T) {
 		}
 	})
 }
+
+func TestScoreUsageEngagement(t *testing.T) {
+	tests := []struct {
+		dau  int
+		mau  int
+		want float64
+	}{
+		{0, 0, 0},       // MAU=0 → 0
+		{30, 100, 100},  // 30% → 100
+		{50, 100, 100},  // 50% → 100
+		{20, 100, 80},   // 20% → 80
+		{25, 100, 80},   // 25% → 80
+		{10, 100, 60},   // 10% → 60
+		{15, 100, 60},   // 15% → 60
+		{5, 100, 40},    // 5% → 40
+		{8, 100, 40},    // 8% → 40
+		{2, 100, 20},    // 2% → 20
+		{0, 100, 20},    // 0% → 20
+	}
+	for _, tt := range tests {
+		got := scoreUsageEngagement(tt.dau, tt.mau)
+		if got != tt.want {
+			t.Errorf("scoreUsageEngagement(%d, %d) = %.0f, want %.0f", tt.dau, tt.mau, got, tt.want)
+		}
+	}
+}

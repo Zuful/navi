@@ -11,6 +11,7 @@ import (
 
 	"github.com/Zuful/navi/internal/provider/beacon"
 	"github.com/Zuful/navi/internal/provider/chronicle"
+	"github.com/Zuful/navi/internal/provider/radar"
 	"github.com/Zuful/navi/internal/provider/vault"
 )
 
@@ -71,6 +72,27 @@ func (m *mockSupportClient) GetTicketHistory(_ context.Context, _ string, _ int)
 
 func (m *mockSupportClient) GetSatisfactionScores(_ context.Context, _ string) (*beacon.SatisfactionMetrics, error) {
 	return m.satisfaction, m.satErr
+}
+
+type mockUsageClient struct {
+	summary    *radar.UsageSummary
+	summaryErr error
+	adoption   *radar.FeatureAdoption
+	adoptErr   error
+	trend      *radar.UsageTrend
+	trendErr   error
+}
+
+func (m *mockUsageClient) GetUsageSummary(_ context.Context, _ string, _ int) (*radar.UsageSummary, error) {
+	return m.summary, m.summaryErr
+}
+
+func (m *mockUsageClient) GetFeatureAdoption(_ context.Context, _ string, _ int) (*radar.FeatureAdoption, error) {
+	return m.adoption, m.adoptErr
+}
+
+func (m *mockUsageClient) GetUsageTrend(_ context.Context, _ string, _ int) (*radar.UsageTrend, error) {
+	return m.trend, m.trendErr
 }
 
 // --- Helpers ---
@@ -197,5 +219,62 @@ func TestGetCustomerHealth_NoSignals(t *testing.T) {
 	text := getText(t, result)
 	if !strings.Contains(text, "N/A") {
 		t.Error("expected N/A when no signals configured")
+	}
+}
+
+func TestGetCustomerHealth_UsageSignalPresent(t *testing.T) {
+	usage := &mockUsageClient{
+		summary: &radar.UsageSummary{
+			DAU: 30,
+			MAU: 100, // 30% stickiness → score 100
+		},
+	}
+	p := New(WithUsage(usage))
+
+	req := newReq(map[string]any{"customer_id": "C-100"})
+	result, err := p.handleGetCustomerHealth(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := getText(t, result)
+	if !strings.Contains(text, "Usage Engagement") {
+		t.Error("missing usage signal row")
+	}
+	if !strings.Contains(text, "100/100") {
+		t.Errorf("expected score 100 for 30%% stickiness, got: %s", text)
+	}
+}
+
+func TestGetCustomerHealth_UsageSignalError(t *testing.T) {
+	usage := &mockUsageClient{
+		summaryErr: errors.New("api error"),
+	}
+	p := New(WithUsage(usage))
+
+	req := newReq(map[string]any{"customer_id": "C-100"})
+	result, err := p.handleGetCustomerHealth(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := getText(t, result)
+	if !strings.Contains(text, "Unavailable") {
+		t.Error("expected 'Unavailable' for usage error")
+	}
+}
+
+func TestGetCustomerHealth_UsageNotConfigured(t *testing.T) {
+	p := New() // no usage client
+
+	req := newReq(map[string]any{"customer_id": "C-100"})
+	result, err := p.handleGetCustomerHealth(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	text := getText(t, result)
+	if !strings.Contains(text, "Provider not configured") {
+		t.Error("expected 'Provider not configured' for usage when nil")
 	}
 }

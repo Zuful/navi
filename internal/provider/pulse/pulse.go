@@ -8,6 +8,7 @@ import (
 	"github.com/Zuful/navi/internal/provider"
 	"github.com/Zuful/navi/internal/provider/beacon"
 	"github.com/Zuful/navi/internal/provider/chronicle"
+	"github.com/Zuful/navi/internal/provider/radar"
 	"github.com/Zuful/navi/internal/provider/vault"
 )
 
@@ -16,6 +17,7 @@ type Provider struct {
 	billing vault.BillingClient
 	comms   chronicle.CommsClient
 	support beacon.SupportClient
+	usage   radar.UsageClient
 	logger  *slog.Logger
 }
 
@@ -27,6 +29,7 @@ type options struct {
 	billing vault.BillingClient
 	comms   chronicle.CommsClient
 	support beacon.SupportClient
+	usage   radar.UsageClient
 }
 
 // WithLogger sets a custom logger.
@@ -49,6 +52,11 @@ func WithSupport(s beacon.SupportClient) Option {
 	return func(o *options) { o.support = s }
 }
 
+// WithUsage injects a usage analytics client for health scoring.
+func WithUsage(u radar.UsageClient) Option {
+	return func(o *options) { o.usage = u }
+}
+
 // New creates a new pulse provider.
 func New(opts ...Option) *Provider {
 	o := &options{logger: slog.Default()}
@@ -59,6 +67,7 @@ func New(opts ...Option) *Provider {
 		billing: o.billing,
 		comms:   o.comms,
 		support: o.support,
+		usage:   o.usage,
 		logger:  o.logger.With(slog.String("provider", "pulse")),
 	}
 }

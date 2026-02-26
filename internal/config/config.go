@@ -16,6 +16,7 @@ type Config struct {
 	Vault     *VaultConfig     `yaml:"vault"`
 	Chronicle *ChronicleConfig `yaml:"chronicle"`
 	Beacon    *BeaconConfig    `yaml:"beacon"`
+	Radar     *RadarConfig     `yaml:"radar"`
 }
 
 // CacheConfig controls the in-memory TTL cache.
@@ -41,6 +42,13 @@ type BeaconConfig struct {
 	Backend   string `yaml:"backend"`
 	Subdomain string `yaml:"subdomain"`
 	APIKey    string `yaml:"-"` // never from YAML; always from env
+}
+
+// RadarConfig holds settings for the product usage analytics provider.
+type RadarConfig struct {
+	Backend   string `yaml:"backend"`
+	APIKey    string `yaml:"-"` // never from YAML; always from env
+	ProjectID string `yaml:"project_id"`
 }
 
 // Load reads the YAML config file and applies environment variable overrides.
@@ -112,6 +120,23 @@ func Load() (*Config, error) {
 		}
 		if beaconSubdomain != "" {
 			cfg.Beacon.Subdomain = beaconSubdomain
+		}
+	}
+
+	// Radar config from env vars.
+	radarAPIKey := os.Getenv("NAVI_RADAR_API_KEY")
+	radarBackend := os.Getenv("NAVI_RADAR_BACKEND")
+	radarProjectID := os.Getenv("NAVI_RADAR_PROJECT_ID")
+	if radarAPIKey != "" || radarBackend != "" || radarProjectID != "" || cfg.Radar != nil {
+		if cfg.Radar == nil {
+			cfg.Radar = &RadarConfig{Backend: "mixpanel"}
+		}
+		cfg.Radar.APIKey = radarAPIKey
+		if radarBackend != "" {
+			cfg.Radar.Backend = radarBackend
+		}
+		if radarProjectID != "" {
+			cfg.Radar.ProjectID = radarProjectID
 		}
 	}
 

@@ -87,6 +87,23 @@ func (p *Provider) handleGetCustomerHealth(ctx context.Context, req mcp.CallTool
 		sb.WriteString("| Support Tickets | - | _Provider not configured_ |\n")
 	}
 
+	// Usage signals.
+	if p.usage != nil {
+		summary, err := p.usage.GetUsageSummary(ctx, customerID, 30)
+		if err != nil {
+			p.logger.Warn("usage signal unavailable", "error", err)
+			sb.WriteString("| Usage Engagement | - | _Unavailable_ |\n")
+		} else {
+			score := scoreUsageEngagement(summary.DAU, summary.MAU)
+			totalScore += score
+			signalCount++
+			details := fmt.Sprintf("DAU: %d, MAU: %d (%.0f%% stickiness)", summary.DAU, summary.MAU, stickiness(summary.DAU, summary.MAU))
+			sb.WriteString(fmt.Sprintf("| Usage Engagement | %.0f/100 | %s |\n", score, details))
+		}
+	} else {
+		sb.WriteString("| Usage | - | _Provider not configured_ |\n")
+	}
+
 	// Communications signals.
 	if p.comms != nil {
 		comms, err := p.comms.GetRecentCommunications(ctx, customerID, 10)
@@ -202,6 +219,32 @@ func scoreSupportTicketLoad(openCount int) float64 {
 	default:
 		return 20
 	}
+}
+
+func scoreUsageEngagement(dau, mau int) float64 {
+	if mau == 0 {
+		return 0
+	}
+	ratio := float64(dau) / float64(mau) * 100
+	switch {
+	case ratio >= 30:
+		return 100
+	case ratio >= 20:
+		return 80
+	case ratio >= 10:
+		return 60
+	case ratio >= 5:
+		return 40
+	default:
+		return 20
+	}
+}
+
+func stickiness(dau, mau int) float64 {
+	if mau == 0 {
+		return 0
+	}
+	return float64(dau) / float64(mau) * 100
 }
 
 func healthLabel(score float64) string {
